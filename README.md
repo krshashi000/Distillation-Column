@@ -2,7 +2,7 @@
 
 An interactive, browser-based distillation column simulator — no server, no dependencies, pure HTML + Canvas + JavaScript.
 
-**[▶ Live Demo]([https://krshashi000.github.io/distillation-column-simulator/distillation_column.html](https://krshashi000.github.io/Distillation-Column/))**
+**[▶ Live Demo](https://krshashi000.github.io/Distillation-Column/)**
 
 ---
 
