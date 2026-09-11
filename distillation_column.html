@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distillation Column Simulator</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --surface2: #252840;
+    --border: #3a3f5c;
+    --text: #e8eaf6;
+    --text2: #9fa8c7;
+    --accent1: #4fc3f7;  /* light blue - vapor/distillate */
+    --accent2: #ff8a65;  /* orange - liquid/bottoms */
+    --accent3: #81c784;  /* green - feed */
+    --accent4: #ce93d8;  /* purple - operating lines */
+    --accent5: #fff176;  /* yellow - stages */
+    --panel: #1e2135;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--accent1); }
+  header p { color: var(--text2); font-size: 12px; }
+
+  .tabs {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    gap: 4px;
+  }
+  .tab {
+    padding: 10px 18px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--text2);
+    font-size: 13px;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent1); border-bottom-color: var(--accent1); }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  .controls {
+    width: 260px;
+    min-width: 220px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ctrl-group { display: flex; flex-direction: column; gap: 8px; }
+  .ctrl-group label {
+    font-size: 11px;
+    color: var(--text2);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .ctrl-row { display: flex; align-items: center; gap: 8px; }
+  .ctrl-row span { min-width: 40px; text-align: right; font-size: 12px; color: var(--accent1); font-weight: 600; }
+  input[type=range] {
+    flex: 1;
+    appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent1);
+    cursor: pointer;
+  }
+  .ctrl-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+  .ctrl-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-blue { background: rgba(79,195,247,0.15); color: var(--accent1); }
+  .badge-orange { background: rgba(255,138,101,0.15); color: var(--accent2); }
+  .badge-green { background: rgba(129,199,132,0.15); color: var(--accent3); }
+  select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    width: 100%;
+    cursor: pointer;
+    outline: none;
+  }
+  select:focus { border-color: var(--accent1); }
+
+  .chart-area {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: 20px;
+    overflow: auto;
+    position: relative;
+  }
+
+  .page { display: none; width: 100%; }
+  .page.active { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+
+  canvas {
+    display: block;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .tooltip {
+    position: fixed;
+    background: rgba(15,17,23,0.95);
+    border: 1px solid var(--accent1);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    display: none;
+    max-width: 220px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .tooltip .tt-title { font-weight: 700; color: var(--accent1); margin-bottom: 6px; font-size: 13px; }
+  .tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; color: var(--text2); margin: 2px 0; }
+  .tooltip .tt-row span:last-child { color: var(--text); font-weight: 600; }
+
+  .column-container { display: flex; gap: 12px; align-items: flex-start; }
+  .stage-list {
+    width: 180px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 580px;
+    overflow-y: auto;
+  }
+  .stage-list h4 { font-size: 12px; color: var(--text2); margin-bottom: 8px; font-weight: 600; }
+  .stage-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 6px;
+    border-radius: 4px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .stage-item:hover, .stage-item.selected { background: var(--surface2); }
+  .stage-item span { color: var(--text2); }
+  .stage-item strong { color: var(--text); }
+
+  .info-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    min-width: 180px;
+  }
+  .info-panel h4 { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .info-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; }
+  .info-row span:first-child { color: var(--text2); }
+  .info-row span:last-child { color: var(--text); font-weight: 600; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 0 0 0;
+    font-size: 11px;
+    color: var(--text2);
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-line { width: 18px; height: 2px; flex-shrink: 0; }
+  .legend-dash { width: 18px; height: 2px; flex-shrink: 0; background: repeating-linear-gradient(90deg,currentColor 0,currentColor 4px,transparent 4px,transparent 8px); }
+
+  /* VLE toggles */
+  .toggle-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .toggle-btn {
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text2);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .toggle-btn.on { background: rgba(79,195,247,0.15); border-color: var(--accent1); color: var(--accent1); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚗️ Distillation Column Simulator</h1>
+    <p>Interactive process visualization · McCabe-Thiele · VLE · Composition profiles</p>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('column')">🏭 Column Schematic</div>
+  <div class="tab" onclick="switchTab('mccabe')">📊 McCabe-Thiele</div>
+  <div class="tab" onclick="switchTab('vle')">🔬 VLE Diagram</div>
+  <div class="tab" onclick="switchTab('profiles')">📈 Stage Profiles</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="main">
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="ctrl-title">System Parameters</div>
+
+    <div class="ctrl-group">
+      <label>Component System</label>
+      <select id="systemSelect" onchange="updateSystem()">
+        <option value="benzene-toluene">Benzene / Toluene</option>
+        <option value="ethanol-water">Ethanol / Water</option>
+        <option value="methanol-water">Methanol / Water</option>
+        <option value="hexane-heptane">n-Hexane / n-Heptane</option>
+      </select>
+    </div>
+
+    <hr class="ctrl-divider">
+    <div class="ctrl-title">Column Design</div>
+
+    <div class="ctrl-group">
+      <label>Reflux Ratio (R)</label>
+      <div class="ctrl-row">
+        <input type="range" id="reflux" min="0.5" max="10" step="0.1" value="2.0" oninput="updateAll()">
+        <span id="reflux_val">2.0</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Feed Stage (from top)</label>
+      <div class="ctrl-row">
+        <input type="range" id="feedStage" min="1" max="20" step="1" value="7" oninput="updateAll()">
+        <span id="feedStage_val">7</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Total Stages (N)</label>
+      <div class="ctrl-row">
+        <input type="range" id="totalStages" min="3" max="25" step="1" value="12" oninput="updateAll()">
+        <span id="totalStages_val">12</span>
+      </div>
+    </div>
+
+    <hr class="ctrl-divider">
+    <div class="ctrl-title">Feed Conditions</div>
+
+    <div class="ctrl-group">
+      <label>Feed Composition (z<sub>F</sub>)</label>
+      <div class="ctrl-row">
+        <input type="range" id="zF" min="0.05" max="0.95" step="0.01" value="0.45" oninput="updateAll()">
+        <span id="zF_val">0.45</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Feed Quality (q)</label>
+      <div class="ctrl-row">
+        <input type="range" id="feedQ" min="0" max="1.5" step="0.05" value="1.0" oninput="updateAll()">
+        <span id="feedQ_val">1.00</span>
+      </div>
+      <div style="font-size:10px;color:var(--text2)">q=0 sat. vapor · q=1 sat. liquid</div>
+    </div>
+
+    <hr class="ctrl-divider">
+    <div class="ctrl-title">Specifications</div>
+
+    <div class="ctrl-group">
+      <label>Distillate Purity (x<sub>D</sub>)</label>
+      <div class="ctrl-row">
+        <input type="range" id="xD" min="0.70" max="0.99" step="0.01" value="0.92" oninput="updateAll()">
+        <span id="xD_val">0.92</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Bottoms Purity (x<sub>B</sub>)</label>
+      <div class="ctrl-row">
+        <input type="range" id="xB" min="0.01" max="0.25" step="0.01" value="0.05" oninput="updateAll()">
+        <span id="xB_val">0.05</span>
+      </div>
+    </div>
+
+    <hr class="ctrl-divider">
+    <div style="display:flex; flex-direction:column; gap:6px">
+      <div class="info-row"><span>R<sub>min</sub></span><span id="rmin_val" style="color:var(--accent3)">—</span></div>
+      <div class="info-row"><span>Stages (theory)</span><span id="ntheo_val" style="color:var(--accent5)">—</span></div>
+      <div class="info-row"><span>Feed stage (opt.)</span><span id="nfeed_val" style="color:var(--accent3)">—</span></div>
+    </div>
+  </div>
+
+  <!-- CHART AREA -->
+  <div class="chart-area">
+
+    <!-- PAGE 1: COLUMN SCHEMATIC -->
+    <div class="page active" id="page-column">
+      <div class="column-container">
+        <canvas id="columnCanvas" width="320" height="580"></canvas>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="info-panel">
+            <h4>Stream Summary</h4>
+            <div class="info-row"><span>Feed (F)</span><span id="s_F">—</span></div>
+            <div class="info-row"><span>Distillate (D)</span><span id="s_D">—</span></div>
+            <div class="info-row"><span>Bottoms (B)</span><span id="s_B">—</span></div>
+            <div class="info-row"><span>Reflux (L)</span><span id="s_L">—</span></div>
+            <div class="info-row"><span>Boilup (V)</span><span id="s_V">—</span></div>
+            <div class="info-row"><span>x<sub>D</sub></span><span id="s_xD">—</span></div>
+            <div class="info-row"><span>x<sub>B</sub></span><span id="s_xB">—</span></div>
+          </div>
+          <div class="info-panel">
+            <h4>Selected Stage</h4>
+            <div id="stageDetail" style="color:var(--text2);font-size:12px">
+              Click a tray on the column
+            </div>
+          </div>
+          <div class="stage-list" id="stageListPanel">
+            <h4>Stage Data</h4>
+            <div id="stageListItems"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 2: McCABE-THIELE -->
+    <div class="page" id="page-mccabe">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <canvas id="mccabeCanvas" width="560" height="520"></canvas>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent1)"></div>Equilibrium</div>
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent4)"></div>Rect. Op. Line</div>
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent2)"></div>Strip. Op. Line</div>
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent3)"></div>q-line</div>
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent5)"></div>Stage steps</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="info-panel" style="min-width:200px">
+          <h4>McCabe-Thiele Summary</h4>
+          <div class="info-row"><span>Reflux ratio R</span><span id="mt_R">—</span></div>
+          <div class="info-row"><span>R<sub>min</sub></span><span id="mt_Rmin">—</span></div>
+          <div class="info-row"><span>R / R<sub>min</sub></span><span id="mt_ratio">—</span></div>
+          <div class="info-row"><span>Theoretical stages</span><span id="mt_N">—</span></div>
+          <div class="info-row"><span>Optimal feed stage</span><span id="mt_Nf">—</span></div>
+          <div class="info-row"><span>x<sub>D</sub></span><span id="mt_xD">—</span></div>
+          <div class="info-row"><span>x<sub>B</sub></span><span id="mt_xB">—</span></div>
+          <div class="info-row"><span>z<sub>F</sub></span><span id="mt_zF">—</span></div>
+          <div class="info-row"><span>q (feed quality)</span><span id="mt_q">—</span></div>
+        </div>
+        <div class="info-panel" style="min-width:200px">
+          <h4>Pinch Analysis</h4>
+          <div class="info-row"><span>Rect. pinch (x)</span><span id="mt_px">—</span></div>
+          <div class="info-row"><span>Rect. pinch (y)</span><span id="mt_py">—</span></div>
+          <div class="info-row"><span>At R<sub>min</sub> condition?</span><span id="mt_atRmin">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 3: VLE DIAGRAM -->
+    <div class="page" id="page-vle">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <canvas id="vleCanvas" width="520" height="460"></canvas>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent1)"></div>Bubble point</div>
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent2)"></div>Dew point</div>
+          <div class="legend-item"><div class="legend-line" style="background:var(--border)"></div>Diagonal y=x</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="info-panel" style="min-width:200px">
+          <h4>System Info</h4>
+          <div id="vleInfo" style="font-size:12px;line-height:1.8;color:var(--text2)">—</div>
+        </div>
+        <div class="info-panel" style="min-width:200px">
+          <h4>VLE Chart Type</h4>
+          <div class="toggle-row" style="margin-bottom:8px">
+            <button class="toggle-btn on" id="btn_xy" onclick="toggleVLE('xy')">x-y</button>
+            <button class="toggle-btn" id="btn_txy" onclick="toggleVLE('txy')">T-xy</button>
+          </div>
+          <div style="font-size:11px;color:var(--text2)" id="vleDesc">
+            x-y diagram shows vapor-liquid equilibrium mole fractions
+          </div>
+        </div>
+        <div class="info-panel" style="min-width:200px">
+          <h4>Hover Point</h4>
+          <div id="vleHoverInfo" style="font-size:12px;color:var(--text2)">Move mouse over chart</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 4: PROFILES -->
+    <div class="page" id="page-profiles">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <canvas id="compCanvas" width="520" height="280"></canvas>
+        <canvas id="tempCanvas" width="520" height="240"></canvas>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent1)"></div>Light comp. (liquid)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent4)"></div>Light comp. (vapor)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>Heavy comp.</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent5)"></div>Temperature</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="info-panel" style="min-width:190px">
+          <h4>Profile Summary</h4>
+          <div class="info-row"><span>Stages (total)</span><span id="pr_N">—</span></div>
+          <div class="info-row"><span>Feed stage</span><span id="pr_Nf">—</span></div>
+          <div class="info-row"><span>Top x (light)</span><span id="pr_xtop">—</span></div>
+          <div class="info-row"><span>Bottom x (light)</span><span id="pr_xbot">—</span></div>
+          <div class="info-row"><span>Top T</span><span id="pr_Ttop">—</span></div>
+          <div class="info-row"><span>Bottom T</span><span id="pr_Tbot">—</span></div>
+        </div>
+        <div class="info-panel" style="min-width:190px">
+          <h4>Click Stage</h4>
+          <div id="profileStageInfo" style="font-size:12px;color:var(--text2)">
+            Hover over composition chart
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .chart-area -->
+</div><!-- .main -->
+
+<script>
+// ============================================================
+//  SYSTEM DATA & VLE MODELS
+// ============================================================
+const SYSTEMS = {
+  'benzene-toluene': {
+    name: 'Benzene / Toluene',
+    light: 'Benzene', heavy: 'Toluene',
+    alpha: 2.45, // relative volatility
+    Tbub_pure: [80.1, 110.6], // boiling pts °C
+    Psat: (T, comp) => {
+      // Antoine: log10(P/mmHg) = A - B/(C+T°C)
+      const A = comp === 0 ? [6.9056, 1211.0, 220.8] : [6.9533, 1343.9, 219.4]; // benzene, toluene
+      return Math.pow(10, A[0] - A[1]/(A[2]+T));
+    },
+    P: 760, // mmHg
+    hasAzeotrope: false,
+    azeotrope: null
+  },
+  'ethanol-water': {
+    name: 'Ethanol / Water',
+    light: 'Ethanol', heavy: 'Water',
+    alpha: null, // use Wilson / modified Raoult
+    Tbub_pure: [78.37, 100.0],
+    Psat: null,
+    P: 760,
+    hasAzeotrope: true,
+    azeotrope: { x: 0.894, T: 78.15 },
+    // Pre-computed VLE data (Hirata et al.)
+    vleData: [
+      {x:0.000,y:0.000,T:100.0},{x:0.019,y:0.170,T:95.5},{x:0.0721,y:0.3891,T:89.0},
+      {x:0.0966,y:0.4375,T:86.7},{x:0.1238,y:0.4704,T:85.3},{x:0.1661,y:0.5089,T:84.1},
+      {x:0.2337,y:0.5445,T:82.7},{x:0.2608,y:0.558,T:82.3},{x:0.3273,y:0.583,T:81.5},
+      {x:0.3965,y:0.6122,T:80.7},{x:0.5079,y:0.6564,T:79.8},{x:0.5198,y:0.6599,T:79.7},
+      {x:0.5732,y:0.6841,T:79.3},{x:0.6763,y:0.7385,T:78.74},{x:0.7472,y:0.7815,T:78.41},
+      {x:0.8943,y:0.8943,T:78.15},{x:1.000,y:1.000,T:78.37}
+    ]
+  },
+  'methanol-water': {
+    name: 'Methanol / Water',
+    light: 'Methanol', heavy: 'Water',
+    alpha: null,
+    Tbub_pure: [64.7, 100.0],
+    Psat: null, P: 760,
+    hasAzeotrope: false,
+    azeotrope: null,
+    vleData: [
+      {x:0,y:0,T:100},{x:0.02,y:0.134,T:96.4},{x:0.04,y:0.234,T:93.5},
+      {x:0.06,y:0.304,T:91.2},{x:0.08,y:0.365,T:89.3},{x:0.10,y:0.418,T:87.7},
+      {x:0.15,y:0.517,T:84.4},{x:0.20,y:0.579,T:81.7},{x:0.30,y:0.665,T:78.0},
+      {x:0.40,y:0.729,T:75.3},{x:0.50,y:0.779,T:73.1},{x:0.60,y:0.825,T:71.2},
+      {x:0.70,y:0.870,T:69.3},{x:0.80,y:0.915,T:67.6},{x:0.90,y:0.958,T:65.8},
+      {x:0.95,y:0.979,T:65.0},{x:1.00,y:1.00,T:64.7}
+    ]
+  },
+  'hexane-heptane': {
+    name: 'n-Hexane / n-Heptane',
+    light: 'n-Hexane', heavy: 'n-Heptane',
+    alpha: 2.16,
+    Tbub_pure: [68.7, 98.4],
+    Psat: (T, comp) => {
+      const A = comp===0 ? [6.8741,1171.6,224.4] : [6.8960,1264.5,216.9];
+      return Math.pow(10, A[0]-A[1]/(A[2]+T));
+    },
+    P: 760, hasAzeotrope: false, azeotrope: null
+  }
+};
+
+let currentSystem = 'benzene-toluene';
+let vleMode = 'xy';
+let selectedStage = null;
+let stageData = [];
+
+// ============================================================
+//  VLE CALCULATIONS
+// ============================================================
+function getVLE(systemKey) {
+  const sys = SYSTEMS[systemKey];
+  const pts = [];
+  if (sys.vleData) return sys.vleData;
+  // Use Raoult's law with constant relative volatility
+  for (let i=0; i<=100; i++) {
+    const x = i/100;
+    const y = sys.alpha * x / (1 + (sys.alpha-1)*x);
+    // Bubble T via linear interpolation
+    const T = sys.Tbub_pure[0]*x + sys.Tbub_pure[1]*(1-x); // approx
+    pts.push({x, y, T});
+  }
+  return pts;
+}
+
+function interpVLE(x, vleData) {
+  if (x <= 0) return {y:0, T:vleData[0].T};
+  if (x >= 1) return {y:1, T:vleData[vleData.length-1].T};
+  for (let i=0; i<vleData.length-1; i++) {
+    if (x >= vleData[i].x && x <= vleData[i+1].x) {
+      const t = (x - vleData[i].x)/(vleData[i+1].x - vleData[i].x);
+      return {
+        y: vleData[i].y + t*(vleData[i+1].y - vleData[i].y),
+        T: vleData[i].T + t*(vleData[i+1].T - vleData[i].T)
+      };
+    }
+  }
+  return {y:x, T:vleData[0].T};
+}
+
+function interpVLEfromY(y, vleData) {
+  if (y <= 0) return {x:0, T:vleData[0].T};
+  if (y >= 1) return {x:1, T:vleData[vleData.length-1].T};
+  for (let i=0; i<vleData.length-1; i++) {
+    if (y >= vleData[i].y && y <= vleData[i+1].y) {
+      const t = (y - vleData[i].y)/(vleData[i+1].y - vleData[i].y);
+      return {
+        x: vleData[i].x + t*(vleData[i+1].x - vleData[i].x),
+        T: vleData[i].T + t*(vleData[i+1].T - vleData[i].T)
+      };
+    }
+  }
+  return {x:y, T:vleData[0].T};
+}
+
+// ============================================================
+//  McCABE-THIELE STEP-OFF
+// ============================================================
+function computeMcCabeThiele() {
+  const R = parseFloat(document.getElementById('reflux').value);
+  const xD = parseFloat(document.getElementById('xD').value);
+  const xB = parseFloat(document.getElementById('xB').value);
+  const zF = parseFloat(document.getElementById('zF').value);
+  const q = parseFloat(document.getElementById('feedQ').value);
+  const vle = getVLE(currentSystem);
+
+  // Rectifying op line: y = R/(R+1)*x + xD/(R+1)
+  const rectSlope = R/(R+1);
+  const rectInt = xD/(R+1);
+
+  // q-line: y = q/(q-1)*x - zF/(q-1)
+  // intersection with rectifying line -> pinch point
+  let xIntersect_rect, yIntersect_rect;
+  if (Math.abs(q-1) < 0.001) {
+    // q=1: q-line is vertical at x=zF
+    xIntersect_rect = zF;
+    yIntersect_rect = rectSlope*zF + rectInt;
+  } else {
+    const qSlope = q/(q-1);
+    const qInt = -zF/(q-1);
+    // qSlope*x + qInt = rectSlope*x + rectInt
+    xIntersect_rect = (rectInt - qInt)/(qSlope - rectSlope);
+    yIntersect_rect = rectSlope*xIntersect_rect + rectInt;
+  }
+
+  // Stripping op line passes through (xB, xB) and (xIntersect, yIntersect)
+  let stripSlope, stripInt;
+  if (Math.abs(xIntersect_rect - xB) < 1e-10) {
+    stripSlope = 10; stripInt = xB - 10*xB;
+  } else {
+    stripSlope = (yIntersect_rect - xB)/(xIntersect_rect - xB);
+    stripInt = xB - stripSlope*xB;
+  }
+
+  // Rmin: find pinch at minimum reflux (q-line intersects equil curve)
+  let xPinch, yPinch;
+  // Find intersection of q-line with VLE
+  let xqPinch = null;
+  if (Math.abs(q-1) < 0.001) {
+    const res = interpVLE(zF, vle);
+    xqPinch = zF; yPinch = res.y;
+  } else {
+    // Numerical search
+    for (let i=0; i<vle.length-1; i++) {
+      const x0=vle[i].x, y0=vle[i].y;
+      const x1=vle[i+1].x, y1=vle[i+1].y;
+      const qS = q/(q-1), qI = -zF/(q-1);
+      // Solve segment intersection
+      const denom = (y1-y0) - qS*(x1-x0);
+      if (Math.abs(denom)<1e-10) continue;
+      const t = (qS*x0 + qI - y0)/denom;
+      if (t>=0 && t<=1) {
+        xqPinch = x0 + t*(x1-x0);
+        yPinch = y0 + t*(y1-y0);
+        break;
+      }
+    }
+    if (xqPinch===null) { xqPinch=zF; yPinch=interpVLE(zF,vle).y; }
+  }
+  xPinch = xqPinch;
+  const Rmin = xqPinch > xD ? 0.1 : (xD - yPinch)/(yPinch - xqPinch) || 0.5;
+
+  // Step off stages from top (y=xD) going DOWN
+  const stages = [];
+  let x = xD, stageCount = 0, feedStageIdx = -1;
+  const maxStages = 50;
+  const totalStagesUI = parseInt(document.getElementById('totalStages').value);
+  const feedStageUI = parseInt(document.getElementById('feedStage').value);
+
+  // We step off theory stages using the UI reflux
+  while (x > xB + 0.001 && stageCount < maxStages) {
+    const y = x; // start of step (go horizontal to equil curve)
+    const res = interpVLEfromY(y, vle);
+    const xNew = res.x;
+    const T = res.T;
+
+    // Determine if this stage is in rect or strip section
+    const inRect = x > xIntersect_rect + 0.001;
+    let yNew;
+    if (inRect && xNew > xIntersect_rect) {
+      yNew = rectSlope*xNew + rectInt;
+    } else {
+      yNew = stripSlope*xNew + stripInt;
+      if (feedStageIdx < 0) feedStageIdx = stageCount;
+    }
+
+    stages.push({
+      n: stageCount+1, x: xNew, y: y, yNext: yNew, T,
+      section: (inRect && feedStageIdx<0) ? 'rect' : 'strip'
+    });
+    stageCount++;
+    x = Math.max(xNew, xB);
+    if (xNew <= xB + 0.001) break;
+    x = xNew;
+  }
+
+  if (feedStageIdx < 0) feedStageIdx = Math.floor(stageCount/2);
+
+  return {
+    R, xD, xB, zF, q,
+    rectSlope, rectInt, stripSlope, stripInt,
+    xIntersect: xIntersect_rect, yIntersect: yIntersect_rect,
+    Rmin: Math.max(0.01, Rmin),
+    stages, nTheory: stageCount, feedStageIdx,
+    xPinch, yPinch
+  };
+}
+
+// Build stage profiles (N stages, feed at Nf)
+function buildStageProfiles() {
+  const N = parseInt(document.getElementById('totalStages').value);
+  const Nf = parseInt(document.getElementById('feedStage').value);
+  const xD = parseFloat(document.getElementById('xD').value);
+  const xB = parseFloat(document.getElementById('xB').value);
+  const R = parseFloat(document.getElementById('reflux').value);
+  const vle = getVLE(currentSystem);
+  const sys = SYSTEMS[currentSystem];
+
+  const mc = computeMcCabeThiele();
+
+  // Simulate N stages
+  const profiles = [];
+  // Start from top (condenser = stage 0) going down
+  let x = xD;
+  for (let n=1; n<=N; n++) {
+    const vleRes = interpVLE(x, vle);
+    const y = vleRes.y;
+    const T = vleRes.T;
+    const inRect = n <= Nf;
+    let xNext;
+    if (inRect) {
+      xNext = (y - mc.rectInt) / mc.rectSlope;
+    } else {
+      xNext = (y - mc.stripInt) / mc.stripSlope;
+    }
+    xNext = Math.max(xB, Math.min(xD, xNext));
+    profiles.push({ n, x, y, T, section: inRect ? 'rect' : 'strip' });
+    x = xNext;
+    if (x <= xB + 0.002) break;
+  }
+  return profiles;
+}
+
+// ============================================================
+//  TAB SWITCHING
+// ============================================================
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const tabs = [...document.querySelectorAll('.tab')];
+  const map = ['column','mccabe','vle','profiles'];
+  tabs[map.indexOf(name)].classList.add('active');
+  document.getElementById('page-'+name).classList.add('active');
+  updateAll();
+}
+
+function updateSystem() {
+  currentSystem = document.getElementById('systemSelect').value;
+  updateAll();
+}
+
+// ============================================================
+//  TOOLTIP
+// ============================================================
+const tooltip = document.getElementById('tooltip');
+function showTooltip(e, html) {
+  tooltip.style.display = 'block';
+  tooltip.innerHTML = html;
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  let x = e.clientX + 16, y = e.clientY - 10;
+  if (x + 240 > window.innerWidth) x = e.clientX - 240;
+  if (y + 160 > window.innerHeight) y = e.clientY - 160;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+function hideTooltip() { tooltip.style.display = 'none'; }
+
+// ============================================================
+//  DRAWING HELPERS
+// ============================================================
+function px(canvas, x, margin) { return margin.l + x * (canvas.width - margin.l - margin.r); }
+function py(canvas, y, margin) { return canvas.height - margin.b - y * (canvas.height - margin.t - margin.b); }
+
+function drawAxes(ctx, canvas, margin, xlabel, ylabel, title) {
+  ctx.strokeStyle = '#3a3f5c';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(margin.l, margin.t);
+  ctx.lineTo(margin.l, canvas.height-margin.b);
+  ctx.lineTo(canvas.width-margin.r, canvas.height-margin.b);
+  ctx.stroke();
+
+  // Grid
+  ctx.strokeStyle = 'rgba(58,63,92,0.4)';
+  for (let i=0; i<=10; i++) {
+    const gx = px(canvas, i/10, margin);
+    const gy = py(canvas, i/10, margin);
+    ctx.beginPath();
+    ctx.moveTo(gx, margin.t);
+    ctx.lineTo(gx, canvas.height-margin.b);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(margin.l, gy);
+    ctx.lineTo(canvas.width-margin.r, gy);
+    ctx.stroke();
+  }
+
+  // Tick labels
+  ctx.fillStyle = '#9fa8c7';
+  ctx.font = '10px Segoe UI';
+  ctx.textAlign = 'center';
+  for (let i=0; i<=5; i++) {
+    const v = i/5;
+    ctx.fillText(v.toFixed(1), px(canvas,v,margin), canvas.height-margin.b+14);
+    ctx.textAlign = 'right';
+    ctx.fillText(v.toFixed(1), margin.l-5, py(canvas,v,margin)+4);
+    ctx.textAlign = 'center';
+  }
+
+  // Labels
+  ctx.fillStyle = '#9fa8c7';
+  ctx.font = '11px Segoe UI';
+  ctx.fillText(xlabel, margin.l + (canvas.width-margin.l-margin.r)/2, canvas.height-4);
+  ctx.save();
+  ctx.translate(12, margin.t + (canvas.height-margin.t-margin.b)/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText(ylabel, 0, 0);
+  ctx.restore();
+
+  // Title
+  ctx.fillStyle = '#e8eaf6';
+  ctx.font = 'bold 13px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, canvas.width/2, margin.t-8);
+}
+
+// ============================================================
+//  DRAW: COLUMN SCHEMATIC
+// ============================================================
+function drawColumn() {
+  const canvas = document.getElementById('columnCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const N = parseInt(document.getElementById('totalStages').value);
+  const Nf = parseInt(document.getElementById('feedStage').value);
+  const xD = parseFloat(document.getElementById('xD').value);
+  const xB = parseFloat(document.getElementById('xB').value);
+  const R = parseFloat(document.getElementById('reflux').value);
+  const zF = parseFloat(document.getElementById('zF').value);
+  const sys = SYSTEMS[currentSystem];
+
+  const profiles = buildStageProfiles();
+  stageData = profiles;
+
+  // Column body
+  const cx = 160, cy_top = 60, cy_bot = 510;
+  const cw = 90, ch = cy_bot - cy_top;
+  const stageH = ch / N;
+
+  // Draw shell
+  const grad = ctx.createLinearGradient(cx-cw/2, 0, cx+cw/2, 0);
+  grad.addColorStop(0, '#1a2040');
+  grad.addColorStop(0.3, '#252840');
+  grad.addColorStop(0.7, '#252840');
+  grad.addColorStop(1, '#1a2040');
+  ctx.fillStyle = grad;
+  ctx.strokeStyle = '#4a5080';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(cx-cw/2, cy_top, cw, ch, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  // Draw trays & liquid compositions
+  for (let n=0; n<N; n++) {
+    const y = cy_top + (n+1)*stageH;
+    const idx = n;
+    const prof = profiles[idx];
+    const x_liq = prof ? prof.x : (n < N/2 ? xD : xB);
+    const frac = (x_liq - xB)/(xD - xB + 0.001);
+
+    // Liquid level on tray
+    const liqW = cw - 10;
+    const liqGrad = ctx.createLinearGradient(0,0,liqW,0);
+    liqGrad.addColorStop(0, `rgba(79,195,247,${0.2 + 0.5*frac})`);
+    liqGrad.addColorStop(1, `rgba(255,138,101,${0.2 + 0.5*(1-frac)})`);
+    ctx.fillStyle = liqGrad;
+    ctx.fillRect(cx-cw/2+5, y-8, liqW, 7);
+
+    // Tray line
+    ctx.strokeStyle = (idx === Nf-1) ? '#81c784' : '#5a6090';
+    ctx.lineWidth = (idx === Nf-1) ? 2 : 1;
+    ctx.beginPath();
+    ctx.moveTo(cx-cw/2+3, y);
+    ctx.lineTo(cx+cw/2-3, y);
+    ctx.stroke();
+
+    // Tray number
+    if (n % Math.max(1,Math.floor(N/8)) === 0 || n === Nf-1) {
+      ctx.fillStyle = n === Nf-1 ? '#81c784' : '#6a7090';
+      ctx.font = '9px Segoe UI';
+      ctx.textAlign = 'left';
+      ctx.fillText(n+1, cx+cw/2+4, y+4);
+    }
+
+    // Selected stage highlight
+    if (selectedStage === n) {
+      ctx.strokeStyle = '#fff176';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx-cw/2+2, cy_top+n*stageH+1, cw-4, stageH-2);
+    }
+  }
+
+  // Vapor bubbles inside column
+  for (let i=0; i<8; i++) {
+    const bx = cx - 20 + Math.sin(i*1.7)*15;
+    const by = cy_top + 30 + i*(ch/8.5);
+    ctx.fillStyle = 'rgba(79,195,247,0.15)';
+    ctx.beginPath();
+    ctx.arc(bx, by, 4+Math.sin(i)*2, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Condenser (top)
+  ctx.fillStyle = '#1e2a3a';
+  ctx.strokeStyle = '#4fc3f7';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(cx-50, 10, 100, 40, 6);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#4fc3f7';
+  ctx.font = 'bold 10px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText('CONDENSER', cx, 34);
+
+  // Reboiler (bottom)
+  ctx.fillStyle = '#2a1e1a';
+  ctx.strokeStyle = '#ff8a65';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(cx-50, cy_bot, 100, 40, 6);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ff8a65';
+  ctx.font = 'bold 10px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText('REBOILER', cx, cy_bot+24);
+
+  // Vapor line (column top -> condenser)
+  drawArrow(ctx, cx+15, cy_top, cx+15, 50, '#4fc3f7', true);
+  // Reflux line (condenser -> column top)
+  drawArrow(ctx, cx-15, 50, cx-15, cy_top, '#4fc3f7', false);
+  // Distillate
+  ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(cx+50, 30); ctx.lineTo(280, 30); ctx.stroke();
+  ctx.setLineDash([]);
+  const D = 1.0; // basis
+  const B = 1.0 * (zF - xB)/(xD - xB);
+  const Dflow = D;
+  appendArrowHead(ctx, 280, 30, '#4fc3f7');
+  ctx.fillStyle = '#4fc3f7'; ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'left';
+  ctx.fillText('D', 285, 34);
+  ctx.fillStyle = '#9fa8c7'; ctx.font = '9px Segoe UI';
+  ctx.fillText(`x=${xD.toFixed(3)}`, 285, 46);
+
+  // Feed arrow
+  const fy = cy_top + (Nf-0.5)*stageH;
+  ctx.strokeStyle = '#81c784'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(30, fy); ctx.lineTo(cx-cw/2, fy); ctx.stroke();
+  appendArrowHead(ctx, cx-cw/2, fy, '#81c784', 'right');
+  ctx.fillStyle = '#81c784'; ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'right';
+  ctx.fillText('F (Feed)', 28, fy-4);
+  ctx.fillStyle = '#9fa8c7'; ctx.font = '9px Segoe UI';
+  ctx.fillText(`z=${zF.toFixed(2)}`, 28, fy+10);
+
+  // Bottoms
+  ctx.strokeStyle = '#ff8a65'; ctx.lineWidth = 2;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(cx+50, cy_bot+20); ctx.lineTo(280, cy_bot+20); ctx.stroke();
+  ctx.setLineDash([]);
+  appendArrowHead(ctx, 280, cy_bot+20, '#ff8a65');
+  ctx.fillStyle = '#ff8a65'; ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'left';
+  ctx.fillText('B', 285, cy_bot+24);
+  ctx.fillStyle = '#9fa8c7'; ctx.font = '9px Segoe UI';
+  ctx.fillText(`x=${xB.toFixed(3)}`, 285, cy_bot+36);
+
+  // Boilup arrow
+  drawArrow(ctx, cx+15, cy_bot, cx+15, cy_bot+5, '#ff8a65', true);
+
+  // Column label
+  ctx.fillStyle = '#9fa8c7'; ctx.font = '9px Segoe UI'; ctx.textAlign = 'center';
+  ctx.fillText(`${N} stages`, cx, cy_top-8);
+  ctx.fillStyle = '#81c784';
+  ctx.fillText(`Feed: stage ${Nf}`, cx, cy_top-18);
+
+  // Stream summary numbers
+  const F=1, mc=computeMcCabeThiele();
+  const Dv = F*(zF-xB)/(xD-xB);
+  const Bv = F - Dv;
+  const L = R*Dv, V = (R+1)*Dv;
+
+  document.getElementById('s_F').textContent = 'F = 1.00';
+  document.getElementById('s_D').textContent = `D = ${Dv.toFixed(3)}`;
+  document.getElementById('s_B').textContent = `B = ${Bv.toFixed(3)}`;
+  document.getElementById('s_L').textContent = `L = ${L.toFixed(3)}`;
+  document.getElementById('s_V').textContent = `V = ${V.toFixed(3)}`;
+  document.getElementById('s_xD').textContent = xD.toFixed(4);
+  document.getElementById('s_xB').textContent = xB.toFixed(4);
+  document.getElementById('rmin_val').textContent = mc.Rmin.toFixed(3);
+  document.getElementById('ntheo_val').textContent = mc.nTheory;
+  document.getElementById('nfeed_val').textContent = mc.feedStageIdx+1;
+
+  // Stage list
+  const listEl = document.getElementById('stageListItems');
+  listEl.innerHTML = '';
+  profiles.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'stage-item' + (selectedStage === i ? ' selected' : '');
+    div.innerHTML = `<strong>Stage ${p.n}</strong><span>x=${p.x.toFixed(3)}</span><span>T=${p.T.toFixed(1)}°C</span>`;
+    div.onclick = () => { selectedStage = i; drawColumn(); updateStageDetail(p); };
+    listEl.appendChild(div);
+  });
+
+  // Canvas click handler
+  canvas.onclick = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const my = e.clientY - rect.top;
+    const stg = Math.floor((my - cy_top) / stageH);
+    if (stg >= 0 && stg < profiles.length) {
+      selectedStage = stg;
+      drawColumn();
+      updateStageDetail(profiles[stg]);
+    }
+  };
+
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const my = e.clientY - rect.top;
+    const stg = Math.floor((my - cy_top) / stageH);
+    if (stg >= 0 && stg < profiles.length) {
+      const p = profiles[stg];
+      showTooltip(e, `
+        <div class="tt-title">Stage ${p.n} (${p.section})</div>
+        <div class="tt-row"><span>Liquid x</span><span>${p.x.toFixed(4)}</span></div>
+        <div class="tt-row"><span>Vapor y</span><span>${p.y.toFixed(4)}</span></div>
+        <div class="tt-row"><span>Temperature</span><span>${p.T.toFixed(2)} °C</span></div>
+        <div class="tt-row"><span>Section</span><span>${p.section==='rect'?'Rectifying':'Stripping'}</span></div>
+      `);
+    } else hideTooltip();
+  };
+  canvas.onmouseleave = hideTooltip;
+}
+
+function updateStageDetail(p) {
+  document.getElementById('stageDetail').innerHTML = `
+    <div class="info-row"><span>Stage #</span><span>${p.n}</span></div>
+    <div class="info-row"><span>Section</span><span>${p.section==='rect'?'Rectifying':'Stripping'}</span></div>
+    <div class="info-row"><span>Liquid x</span><span>${p.x.toFixed(4)}</span></div>
+    <div class="info-row"><span>Vapor y</span><span>${p.y.toFixed(4)}</span></div>
+    <div class="info-row"><span>Temperature</span><span>${p.T.toFixed(2)} °C</span></div>
+  `;
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color, up) {
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+}
+
+function appendArrowHead(ctx, x, y, color, dir='right') {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (dir === 'right') {
+    ctx.moveTo(x,y); ctx.lineTo(x-7,y-4); ctx.lineTo(x-7,y+4);
+  } else {
+    ctx.moveTo(x,y); ctx.lineTo(x+7,y-4); ctx.lineTo(x+7,y+4);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+// ============================================================
+//  DRAW: McCABE-THIELE
+// ============================================================
+function drawMcCabeThiele() {
+  const canvas = document.getElementById('mccabeCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const margin = {l:50, r:20, t:30, b:40};
+  const vle = getVLE(currentSystem);
+  const sys = SYSTEMS[currentSystem];
+  const mc = computeMcCabeThiele();
+
+  drawAxes(ctx, canvas, margin, `x (${sys.light} mole fraction)`, `y (${sys.light} mole fraction)`, 'McCabe-Thiele Diagram');
+
+  // Diagonal y=x
+  ctx.strokeStyle = 'rgba(150,150,180,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+  ctx.beginPath();
+  ctx.moveTo(px(canvas,0,margin), py(canvas,0,margin));
+  ctx.lineTo(px(canvas,1,margin), py(canvas,1,margin));
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Equilibrium curve
+  ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  vle.forEach((pt,i) => {
+    const gx = px(canvas,pt.x,margin), gy = py(canvas,pt.y,margin);
+    i===0 ? ctx.moveTo(gx,gy) : ctx.lineTo(gx,gy);
+  });
+  ctx.stroke();
+
+  // q-line
+  const q = mc.q;
+  ctx.strokeStyle = '#81c784'; ctx.lineWidth = 2; ctx.setLineDash([6,3]);
+  ctx.beginPath();
+  if (Math.abs(q-1)<0.001) {
+    ctx.moveTo(px(canvas,mc.zF,margin), py(canvas,0,margin));
+    ctx.lineTo(px(canvas,mc.zF,margin), py(canvas,1,margin));
+  } else {
+    const qSlope = q/(q-1), qInt = -mc.zF/(q-1);
+    for (let i=0; i<=50; i++) {
+      const xv = i/50;
+      const yv = qSlope*xv + qInt;
+      if (yv<-0.1||yv>1.1) continue;
+      const gx=px(canvas,xv,margin), gy=py(canvas,yv,margin);
+      i===0 ? ctx.moveTo(gx,gy) : ctx.lineTo(gx,gy);
+    }
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Rectifying operating line
+  ctx.strokeStyle = '#ce93d8'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px(canvas,mc.xD,margin), py(canvas,mc.xD,margin));
+  ctx.lineTo(px(canvas,mc.xIntersect,margin), py(canvas,mc.yIntersect,margin));
+  ctx.stroke();
+
+  // Stripping operating line
+  ctx.strokeStyle = '#ff8a65'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px(canvas,mc.xB,margin), py(canvas,mc.xB,margin));
+  ctx.lineTo(px(canvas,mc.xIntersect,margin), py(canvas,mc.yIntersect,margin));
+  ctx.stroke();
+
+  // Stage stepping
+  ctx.strokeStyle = '#fff176'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  const stages = mc.stages;
+  if (stages.length > 0) {
+    let curX = mc.xD, curY = mc.xD;
+    ctx.moveTo(px(canvas,curX,margin), py(canvas,curY,margin));
+    stages.forEach(s => {
+      // Vertical to equil curve
+      ctx.lineTo(px(canvas,s.x,margin), py(canvas,s.y,margin));
+      // Horizontal to op line
+      ctx.lineTo(px(canvas,s.x,margin), py(canvas,s.yNext,margin));
+    });
+  }
+  ctx.stroke();
+
+  // Key points
+  const dotPts = [
+    {x:mc.xD, y:mc.xD, color:'#4fc3f7', label:'xD'},
+    {x:mc.xB, y:mc.xB, color:'#ff8a65', label:'xB'},
+    {x:mc.zF, y:MC_xF_to_yF(mc.zF, vle), color:'#81c784', label:'zF'},
+    {x:mc.xPinch, y:mc.yPinch, color:'#ce93d8', label:'Pinch'},
+  ];
+  dotPts.forEach(d => {
+    ctx.fillStyle = d.color;
+    ctx.beginPath();
+    ctx.arc(px(canvas,d.x,margin), py(canvas,d.y,margin), 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = d.color;
+    ctx.font = '10px Segoe UI';
+    ctx.textAlign = 'left';
+    ctx.fillText(d.label, px(canvas,d.x,margin)+7, py(canvas,d.y,margin)-4);
+  });
+
+  // Update info panel
+  document.getElementById('mt_R').textContent = mc.R.toFixed(2);
+  document.getElementById('mt_Rmin').textContent = mc.Rmin.toFixed(3);
+  document.getElementById('mt_ratio').textContent = (mc.R/mc.Rmin).toFixed(2);
+  document.getElementById('mt_N').textContent = mc.nTheory;
+  document.getElementById('mt_Nf').textContent = mc.feedStageIdx+1;
+  document.getElementById('mt_xD').textContent = mc.xD.toFixed(4);
+  document.getElementById('mt_xB').textContent = mc.xB.toFixed(4);
+  document.getElementById('mt_zF').textContent = mc.zF.toFixed(3);
+  document.getElementById('mt_q').textContent = mc.q.toFixed(2);
+  document.getElementById('mt_px').textContent = mc.xPinch.toFixed(4);
+  document.getElementById('mt_py').textContent = mc.yPinch.toFixed(4);
+  document.getElementById('mt_atRmin').textContent = mc.R <= mc.Rmin*1.05 ? '⚠️ Near Rmin' : 'No';
+
+  // Hover interactivity
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const xv = (mx - margin.l)/(canvas.width - margin.l - margin.r);
+    const yv = 1 - (my - margin.t)/(canvas.height - margin.t - margin.b);
+    if (xv<0||xv>1||yv<0||yv>1) { hideTooltip(); return; }
+    const eq = interpVLE(xv, vle);
+    const yRect = mc.rectSlope*xv + mc.rectInt;
+    const yStrip = mc.stripSlope*xv + mc.stripInt;
+    showTooltip(e,`
+      <div class="tt-title">x = ${xv.toFixed(3)}</div>
+      <div class="tt-row"><span>Equil. y</span><span>${eq.y.toFixed(4)}</span></div>
+      <div class="tt-row"><span>Rect. op. y</span><span>${(yRect<0||yRect>1)?'—':yRect.toFixed(4)}</span></div>
+      <div class="tt-row"><span>Strip. op. y</span><span>${(yStrip<0||yStrip>1)?'—':yStrip.toFixed(4)}</span></div>
+      <div class="tt-row"><span>Stage count</span><span>${mc.nTheory}</span></div>
+    `);
+  };
+  canvas.onmouseleave = hideTooltip;
+}
+
+function MC_xF_to_yF(zF, vle) { return interpVLE(zF, vle).y; }
+
+// ============================================================
+//  DRAW: VLE DIAGRAM
+// ============================================================
+function drawVLE() {
+  const canvas = document.getElementById('vleCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const sys = SYSTEMS[currentSystem];
+  const vle = getVLE(currentSystem);
+  const margin = {l:55, r:20, t:30, b:40};
+
+  if (vleMode === 'xy') {
+    drawAxes(ctx, canvas, margin, `x (${sys.light})`, `y (${sys.light})`, `VLE: ${sys.name}`);
+
+    // Diagonal
+    ctx.strokeStyle = 'rgba(150,150,180,0.35)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    ctx.moveTo(px(canvas,0,margin),py(canvas,0,margin));
+    ctx.lineTo(px(canvas,1,margin),py(canvas,1,margin));
+    ctx.stroke(); ctx.setLineDash([]);
+
+    // Equilibrium
+    ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    vle.forEach((pt,i)=>{
+      i===0 ? ctx.moveTo(px(canvas,pt.x,margin),py(canvas,pt.y,margin))
+            : ctx.lineTo(px(canvas,pt.x,margin),py(canvas,pt.y,margin));
+    });
+    ctx.stroke();
+
+    // Azeotrope marker
+    if (sys.hasAzeotrope) {
+      const az = sys.azeotrope;
+      ctx.fillStyle = '#ff5252';
+      ctx.beginPath();
+      ctx.arc(px(canvas,az.x,margin), py(canvas,az.x,margin), 7, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#ff5252'; ctx.font='bold 10px Segoe UI';
+      ctx.fillText(`Azeotrope\nx=${az.x}`, px(canvas,az.x,margin)+10, py(canvas,az.x,margin)-4);
+    }
+
+    // VLE info
+    const hasAz = sys.hasAzeotrope;
+    document.getElementById('vleInfo').innerHTML = `
+      <b>${sys.name}</b><br>
+      Light: ${sys.light}<br>
+      Heavy: ${sys.heavy}<br>
+      P = 760 mmHg<br>
+      ${hasAz ? `<span style="color:#ff5252">⚠ Azeotrope at x=${sys.azeotrope.x}<br>T=${sys.azeotrope.T}°C</span>` : 'No azeotrope'}
+    `;
+
+    canvas.onmousemove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const xv = (mx - margin.l)/(canvas.width - margin.l - margin.r);
+      if (xv<0||xv>1) { hideTooltip(); return; }
+      const eq = interpVLE(xv, vle);
+      document.getElementById('vleHoverInfo').innerHTML = `
+        x = ${xv.toFixed(4)}<br>
+        y = ${eq.y.toFixed(4)}<br>
+        α = ${xv>0&&xv<1 ? ((eq.y*(1-xv))/((1-eq.y)*xv+1e-9)).toFixed(3) : '—'}<br>
+        T ≈ ${eq.T.toFixed(1)} °C
+      `;
+      showTooltip(e,`
+        <div class="tt-title">VLE Point</div>
+        <div class="tt-row"><span>x (liquid)</span><span>${xv.toFixed(4)}</span></div>
+        <div class="tt-row"><span>y (vapor)</span><span>${eq.y.toFixed(4)}</span></div>
+        <div class="tt-row"><span>Rel. vol. α</span><span>${xv>0&&xv<1?((eq.y*(1-xv))/((1-eq.y)*xv+1e-9)).toFixed(3):'∞'}</span></div>
+        <div class="tt-row"><span>Temperature</span><span>${eq.T.toFixed(1)} °C</span></div>
+      `);
+    };
+    canvas.onmouseleave = () => { hideTooltip(); };
+
+  } else {
+    // T-xy diagram
+    const margin2 = {l:55, r:30, t:30, b:40};
+    const Tmin = Math.min(...vle.map(v=>v.T)) - 3;
+    const Tmax = Math.max(...vle.map(v=>v.T)) + 3;
+    const Trange = Tmax - Tmin;
+
+    // Axes
+    ctx.strokeStyle = '#3a3f5c'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margin2.l, margin2.t);
+    ctx.lineTo(margin2.l, canvas.height-margin2.b);
+    ctx.lineTo(canvas.width-margin2.r, canvas.height-margin2.b);
+    ctx.stroke();
+
+    // Grid + tick labels
+    ctx.strokeStyle = 'rgba(58,63,92,0.4)';
+    for (let i=0; i<=5; i++) {
+      const xv = i/5;
+      const gx = margin2.l + xv*(canvas.width-margin2.l-margin2.r);
+      ctx.beginPath(); ctx.moveTo(gx,margin2.t); ctx.lineTo(gx,canvas.height-margin2.b); ctx.stroke();
+      ctx.fillStyle='#9fa8c7';ctx.font='10px Segoe UI';ctx.textAlign='center';
+      ctx.fillText(xv.toFixed(1), gx, canvas.height-margin2.b+14);
+
+      const Tv = Tmin + i/5*Trange;
+      const gy = canvas.height - margin2.b - i/5*(canvas.height-margin2.t-margin2.b);
+      ctx.beginPath(); ctx.moveTo(margin2.l,gy); ctx.lineTo(canvas.width-margin2.r,gy); ctx.stroke();
+      ctx.fillStyle='#9fa8c7';ctx.textAlign='right';
+      ctx.fillText(Tv.toFixed(0)+'°', margin2.l-5, gy+4);
+    }
+    ctx.fillStyle='#9fa8c7';ctx.font='11px Segoe UI';ctx.textAlign='center';
+    ctx.fillText(`x, y (${sys.light})`, margin2.l+(canvas.width-margin2.l-margin2.r)/2, canvas.height-4);
+    ctx.save(); ctx.translate(12, margin2.t+(canvas.height-margin2.t-margin2.b)/2);
+    ctx.rotate(-Math.PI/2); ctx.fillText('Temperature (°C)',0,0); ctx.restore();
+    ctx.fillStyle='#e8eaf6';ctx.font='bold 13px Segoe UI';ctx.textAlign='center';
+    ctx.fillText(`T-xy: ${sys.name}`, canvas.width/2, margin2.t-8);
+
+    const txX = (v) => margin2.l + v*(canvas.width-margin2.l-margin2.r);
+    const txY = (T) => canvas.height - margin2.b - (T-Tmin)/Trange*(canvas.height-margin2.t-margin2.b);
+
+    // Bubble (liquid) curve: x vs T
+    ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    vle.forEach((pt,i)=>{
+      i===0 ? ctx.moveTo(txX(pt.x), txY(pt.T)) : ctx.lineTo(txX(pt.x), txY(pt.T));
+    });
+    ctx.stroke();
+
+    // Dew (vapor) curve: y vs T
+    ctx.strokeStyle = '#ff8a65'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    vle.forEach((pt,i)=>{
+      i===0 ? ctx.moveTo(txX(pt.y), txY(pt.T)) : ctx.lineTo(txX(pt.y), txY(pt.T));
+    });
+    ctx.stroke();
+
+    // Two-phase region fill
+    ctx.fillStyle = 'rgba(79,195,247,0.06)';
+    ctx.beginPath();
+    vle.forEach((pt,i)=>{
+      i===0 ? ctx.moveTo(txX(pt.x),txY(pt.T)) : ctx.lineTo(txX(pt.x),txY(pt.T));
+    });
+    [...vle].reverse().forEach(pt=>ctx.lineTo(txX(pt.y),txY(pt.T)));
+    ctx.closePath(); ctx.fill();
+
+    // Labels
+    ctx.fillStyle='#4fc3f7';ctx.font='bold 10px Segoe UI';ctx.textAlign='left';
+    ctx.fillText('Bubble (liquid)',txX(0.1),txY(vle[2].T)+16);
+    ctx.fillStyle='#ff8a65';
+    ctx.fillText('Dew (vapor)',txX(0.55),txY(vle[10].T)-8);
+
+    canvas.onmousemove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const xv = (mx - margin2.l)/(canvas.width-margin2.l-margin2.r);
+      if (xv<0||xv>1) {hideTooltip();return;}
+      const eq = interpVLE(xv, vle);
+      showTooltip(e,`
+        <div class="tt-title">x = ${xv.toFixed(3)}</div>
+        <div class="tt-row"><span>Bubble T</span><span>${eq.T.toFixed(2)} °C</span></div>
+        <div class="tt-row"><span>Vapor y</span><span>${eq.y.toFixed(4)}</span></div>
+      `);
+    };
+    canvas.onmouseleave = hideTooltip;
+  }
+}
+
+function toggleVLE(mode) {
+  vleMode = mode;
+  document.getElementById('btn_xy').classList.toggle('on', mode==='xy');
+  document.getElementById('btn_txy').classList.toggle('on', mode==='txy');
+  document.getElementById('vleDesc').textContent = mode==='xy'
+    ? 'x-y diagram shows vapor-liquid equilibrium mole fractions'
+    : 'T-xy diagram shows bubble and dew point curves vs temperature';
+  drawVLE();
+}
+
+// ============================================================
+//  DRAW: STAGE PROFILES
+// ============================================================
+function drawProfiles() {
+  const profiles = buildStageProfiles();
+  const sys = SYSTEMS[currentSystem];
+  const xD = parseFloat(document.getElementById('xD').value);
+  const xB = parseFloat(document.getElementById('xB').value);
+  const Nf = parseInt(document.getElementById('feedStage').value);
+
+  // Composition profile
+  {
+    const canvas = document.getElementById('compCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const margin = {l:50, r:20, t:30, b:40};
+    const N = profiles.length;
+
+    // Custom axes for stage number
+    ctx.strokeStyle = '#3a3f5c'; ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(margin.l, margin.t);
+    ctx.lineTo(margin.l, canvas.height-margin.b);
+    ctx.lineTo(canvas.width-margin.r, canvas.height-margin.b);
+    ctx.stroke();
+
+    // Grid
+    ctx.strokeStyle = 'rgba(58,63,92,0.4)';
+    for (let i=0; i<=5; i++) {
+      const gy = margin.t + i/5*(canvas.height-margin.t-margin.b);
+      ctx.beginPath();ctx.moveTo(margin.l,gy);ctx.lineTo(canvas.width-margin.r,gy);ctx.stroke();
+      ctx.fillStyle='#9fa8c7';ctx.font='10px Segoe UI';ctx.textAlign='right';
+      ctx.fillText((1-i/5).toFixed(1), margin.l-5, gy+4);
+    }
+    for (let n=1; n<=N; n+=Math.max(1,Math.floor(N/8))) {
+      const gx = margin.l + (n-0.5)/N*(canvas.width-margin.l-margin.r);
+      ctx.beginPath();ctx.moveTo(gx,margin.t);ctx.lineTo(gx,canvas.height-margin.b);ctx.stroke();
+      ctx.fillStyle='#9fa8c7';ctx.textAlign='center';
+      ctx.fillText(n, gx, canvas.height-margin.b+14);
+    }
+
+    ctx.fillStyle='#9fa8c7';ctx.font='11px Segoe UI';ctx.textAlign='center';
+    ctx.fillText('Stage Number (top → bottom)', margin.l+(canvas.width-margin.l-margin.r)/2, canvas.height-4);
+    ctx.save();ctx.translate(12,margin.t+(canvas.height-margin.t-margin.b)/2);
+    ctx.rotate(-Math.PI/2);ctx.fillText('Mole Fraction',0,0);ctx.restore();
+    ctx.fillStyle='#e8eaf6';ctx.font='bold 13px Segoe UI';ctx.textAlign='center';
+    ctx.fillText('Composition Profile', canvas.width/2, margin.t-8);
+
+    const sx = (n) => margin.l + (n-0.5)/N*(canvas.width-margin.l-margin.r);
+    const sy = (v) => margin.t + (1-v)*(canvas.height-margin.t-margin.b);
+
+    // Feed stage marker
+    const fsx = sx(Nf);
+    ctx.strokeStyle = 'rgba(129,199,132,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(fsx,margin.t);ctx.lineTo(fsx,canvas.height-margin.b);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#81c784';ctx.font='9px Segoe UI';ctx.textAlign='center';
+    ctx.fillText('Feed', fsx, margin.t+10);
+
+    // Liquid x (light)
+    ctx.strokeStyle='#4fc3f7';ctx.lineWidth=2;
+    ctx.beginPath();
+    profiles.forEach((p,i)=>{
+      i===0?ctx.moveTo(sx(p.n),sy(p.x)):ctx.lineTo(sx(p.n),sy(p.x));
+    });
+    ctx.stroke();
+    profiles.forEach(p=>{
+      ctx.fillStyle='#4fc3f7';ctx.beginPath();
+      ctx.arc(sx(p.n),sy(p.x),3,0,Math.PI*2);ctx.fill();
+    });
+
+    // Vapor y (light)
+    ctx.strokeStyle='#ce93d8';ctx.lineWidth=2;
+    ctx.beginPath();
+    profiles.forEach((p,i)=>{
+      i===0?ctx.moveTo(sx(p.n),sy(p.y)):ctx.lineTo(sx(p.n),sy(p.y));
+    });
+    ctx.stroke();
+    profiles.forEach(p=>{
+      ctx.fillStyle='#ce93d8';ctx.beginPath();
+      ctx.arc(sx(p.n),sy(p.y),3,0,Math.PI*2);ctx.fill();
+    });
+
+    // Liquid x (heavy) = 1-x
+    ctx.strokeStyle='#ff8a65';ctx.lineWidth=2;ctx.setLineDash([5,3]);
+    ctx.beginPath();
+    profiles.forEach((p,i)=>{
+      i===0?ctx.moveTo(sx(p.n),sy(1-p.x)):ctx.lineTo(sx(p.n),sy(1-p.x));
+    });
+    ctx.stroke();ctx.setLineDash([]);
+
+    canvas.onmousemove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const n = Math.round((mx-margin.l)/((canvas.width-margin.l-margin.r)/N)+0.5);
+      const p = profiles.find(pp=>pp.n===n);
+      if (!p) {hideTooltip();document.getElementById('profileStageInfo').innerHTML='Hover over chart';return;}
+      showTooltip(e,`
+        <div class="tt-title">Stage ${p.n}</div>
+        <div class="tt-row"><span>x (${sys.light})</span><span>${p.x.toFixed(4)}</span></div>
+        <div class="tt-row"><span>y (${sys.light})</span><span>${p.y.toFixed(4)}</span></div>
+        <div class="tt-row"><span>x (${sys.heavy})</span><span>${(1-p.x).toFixed(4)}</span></div>
+        <div class="tt-row"><span>T</span><span>${p.T.toFixed(1)}°C</span></div>
+        <div class="tt-row"><span>Section</span><span>${p.section}</span></div>
+      `);
+      document.getElementById('profileStageInfo').innerHTML=`
+        <div class="info-row"><span>Stage</span><span>${p.n}</span></div>
+        <div class="info-row"><span>x light</span><span>${p.x.toFixed(4)}</span></div>
+        <div class="info-row"><span>y light</span><span>${p.y.toFixed(4)}</span></div>
+        <div class="info-row"><span>T</span><span>${p.T.toFixed(1)}°C</span></div>
+      `;
+    };
+    canvas.onmouseleave = hideTooltip;
+
+    // Summary
+    document.getElementById('pr_N').textContent = profiles.length;
+    document.getElementById('pr_Nf').textContent = Nf;
+    document.getElementById('pr_xtop').textContent = profiles[0]?.x.toFixed(4)||'—';
+    document.getElementById('pr_xbot').textContent = profiles[profiles.length-1]?.x.toFixed(4)||'—';
+    document.getElementById('pr_Ttop').textContent = (profiles[0]?.T.toFixed(1)||'—')+'°C';
+    document.getElementById('pr_Tbot').textContent = (profiles[profiles.length-1]?.T.toFixed(1)||'—')+'°C';
+  }
+
+  // Temperature profile
+  {
+    const canvas = document.getElementById('tempCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const margin = {l:55, r:20, t:24, b:40};
+    const N = profiles.length;
+    const Tvals = profiles.map(p=>p.T);
+    const Tmin = Math.min(...Tvals)-2, Tmax = Math.max(...Tvals)+2;
+    const Tr = Tmax-Tmin;
+
+    ctx.strokeStyle='#3a3f5c';ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(margin.l,margin.t);ctx.lineTo(margin.l,canvas.height-margin.b);
+    ctx.lineTo(canvas.width-margin.r,canvas.height-margin.b);
+    ctx.stroke();
+
+    ctx.strokeStyle='rgba(58,63,92,0.4)';
+    for(let i=0;i<=4;i++){
+      const gy=margin.t+i/4*(canvas.height-margin.t-margin.b);
+      ctx.beginPath();ctx.moveTo(margin.l,gy);ctx.lineTo(canvas.width-margin.r,gy);ctx.stroke();
+      const Tv=Tmax-i/4*Tr;
+      ctx.fillStyle='#9fa8c7';ctx.font='10px Segoe UI';ctx.textAlign='right';
+      ctx.fillText(Tv.toFixed(0)+'°C',margin.l-4,gy+4);
+    }
+    for(let n=1;n<=N;n+=Math.max(1,Math.floor(N/8))){
+      const gx=margin.l+(n-0.5)/N*(canvas.width-margin.l-margin.r);
+      ctx.beginPath();ctx.moveTo(gx,margin.t);ctx.lineTo(gx,canvas.height-margin.b);ctx.stroke();
+      ctx.fillStyle='#9fa8c7';ctx.textAlign='center';
+      ctx.fillText(n,gx,canvas.height-margin.b+14);
+    }
+
+    ctx.fillStyle='#9fa8c7';ctx.font='11px Segoe UI';ctx.textAlign='center';
+    ctx.fillText('Stage Number (top → bottom)',margin.l+(canvas.width-margin.l-margin.r)/2,canvas.height-4);
+    ctx.save();ctx.translate(12,margin.t+(canvas.height-margin.t-margin.b)/2);
+    ctx.rotate(-Math.PI/2);ctx.fillText('Temperature (°C)',0,0);ctx.restore();
+    ctx.fillStyle='#e8eaf6';ctx.font='bold 13px Segoe UI';ctx.textAlign='center';
+    ctx.fillText('Temperature Profile',canvas.width/2,margin.t-6);
+
+    const sx=(n)=>margin.l+(n-0.5)/N*(canvas.width-margin.l-margin.r);
+    const sy=(T)=>margin.t+(Tmax-T)/Tr*(canvas.height-margin.t-margin.b);
+
+    // Feed line
+    const fsx=sx(Nf);
+    ctx.strokeStyle='rgba(129,199,132,0.5)';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(fsx,margin.t);ctx.lineTo(fsx,canvas.height-margin.b);ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Temperature line
+    ctx.strokeStyle='#fff176';ctx.lineWidth=2;
+    ctx.beginPath();
+    profiles.forEach((p,i)=>{
+      i===0?ctx.moveTo(sx(p.n),sy(p.T)):ctx.lineTo(sx(p.n),sy(p.T));
+    });
+    ctx.stroke();
+    profiles.forEach(p=>{
+      ctx.fillStyle='#fff176';ctx.beginPath();
+      ctx.arc(sx(p.n),sy(p.T),3,0,Math.PI*2);ctx.fill();
+    });
+
+    canvas.onmousemove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const n = Math.round((mx-margin.l)/((canvas.width-margin.l-margin.r)/N)+0.5);
+      const p = profiles.find(pp=>pp.n===n);
+      if(!p){hideTooltip();return;}
+      showTooltip(e,`
+        <div class="tt-title">Stage ${p.n} Temperature</div>
+        <div class="tt-row"><span>T</span><span>${p.T.toFixed(2)} °C</span></div>
+        <div class="tt-row"><span>x (${sys.light})</span><span>${p.x.toFixed(4)}</span></div>
+      `);
+    };
+    canvas.onmouseleave = hideTooltip;
+  }
+}
+
+// ============================================================
+//  SLIDER UPDATES
+// ============================================================
+function syncSliders() {
+  const ids = ['reflux','feedStage','totalStages','zF','feedQ','xD','xB'];
+  const fmt = {reflux:1, feedStage:0, totalStages:0, zF:2, feedQ:2, xD:2, xB:2};
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    const val = parseFloat(el.value);
+    document.getElementById(id+'_val').textContent = val.toFixed(fmt[id]);
+  });
+}
+
+function updateAll() {
+  syncSliders();
+  const active = document.querySelector('.page.active').id.replace('page-','');
+  if (active === 'column') drawColumn();
+  else if (active === 'mccabe') drawMcCabeThiele();
+  else if (active === 'vle') drawVLE();
+  else if (active === 'profiles') drawProfiles();
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+window.addEventListener('load', () => {
+  syncSliders();
+  drawColumn();
+});
+window.addEventListener('resize', updateAll);
+</script>
+</body>
+</html>
